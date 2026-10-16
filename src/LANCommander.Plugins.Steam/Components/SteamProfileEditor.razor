@@ -1,0 +1,141 @@
+@inject SteamCmdServiceFactory SteamCmd
+@inject NotificationService Notifications
+
+<Spin Loading="_connectionStatus == SteamCmdConnectionStatus.Unknown">
+    @if (_connectionStatus == SteamCmdConnectionStatus.NotInstalled)
+    {
+        <Alert Warning Title="SteamCMD could not be found">
+            Set its path above, or install it, before signing in.
+        </Alert>
+    }
+
+    @if (_connectionStatus is SteamCmdConnectionStatus.Unauthenticated or SteamCmdConnectionStatus.NotInstalled)
+    {
+        <Form Model="this" OnSubmit="AuthenticateAsync" Disabled="_processingLogin">
+            <Flex Gap="Gap.Medium" Align="Align.End">
+                <FormItem Label="Username" Style="flex-grow: 1">
+                    <TextInput Value="@Username" ValueChanged="UsernameChanged" />
+                </FormItem>
+                <FormItem Label="Password" Style="flex-grow: 1">
+                    <PasswordInput @bind-Value="_password" />
+                </FormItem>
+                <FormItem>
+                    <Button Primary Submit Loading="_processingLogin">Login</Button>
+                </FormItem>
+            </Flex>
+        </Form>
+    }
+
+    <Form Model="this">
+        @if (_connectionStatus == SteamCmdConnectionStatus.Authenticated)
+        {
+            <FormItem Label="Username">
+                <TextInput Value="@Username" Disabled />
+            </FormItem>
+        }
+
+        <FormItem Label="Install Directory" Help="Where content for this account is installed by default.">
+            <TextInput Value="@InstallDirectory" ValueChanged="InstallDirectoryChanged" />
+        </FormItem>
+    </Form>
+</Spin>
+
+@code {
+    [Parameter] public string? Username { get; set; }
+    [Parameter] public EventCallback<string?> UsernameChanged { get; set; }
+    [Parameter] public string? InstallDirectory { get; set; }
+    [Parameter] public EventCallback<string?> InstallDirectoryChanged { get; set; }
+
+    /// <summary>The SteamCMD path on the page, which may not be saved yet.</summary>
+    [Parameter] public string? SteamCmdPath { get; set; }
+
+    SteamCmdConnectionStatus _connectionStatus = SteamCmdConnectionStatus.Unknown;
+
+    bool _processingLogin;
+    string? _password = String.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (!String.IsNullOrWhiteSpace(Username))
+                _connectionStatus = await CreateSteamCmd().GetConnectionStatusAsync(Username);
+            else
+                _connectionStatus = SteamCmdConnectionStatus.Unauthenticated;
+        }
+        catch (Exception ex)
+        {
+            _connectionStatus = SteamCmdConnectionStatus.Unauthenticated;
+
+            Notifications.Error(ex, "The Steam connection could not be checked");
+        }
+    }
+
+    async Task AuthenticateAsync()
+    {
+        if (String.IsNullOrWhiteSpace(Username))
+        {
+            Notifications.Error("Enter the Steam account's username");
+
+            return;
+        }
+
+        _processingLogin = true;
+
+        var progress = Notifications.ShowPersistent(NotificationLevel.Info, "Logging into Steam...", "Check the Steam mobile app to confirm this login");
+
+        try
+        {
+            var steamCmd = CreateSteamCmd();
+            var status = await steamCmd.LoginToSteamAsync(Username, _password);
+
+            progress.Close();
+
+            if (status == SteamCmdStatus.Success)
+            {
+                _connectionStatus = await steamCmd.GetConnectionStatusAsync(Username);
+                _password = String.Empty;
+
+                // Signing in is what makes a profile worth keeping
+                await steamCmd.SaveProfileAsync(new SteamCmdProfile
+                {
+                    Username = Username,
+                    InstallDirectory = InstallDirectory ?? String.Empty,
+                });
+
+                Notifications.Success("Successfully authenticated to Steam!");
+            }
+            else
+            {
+                Notifications.Error(status switch
+                {
+                    SteamCmdStatus.InvalidUsername or SteamCmdStatus.InvalidPassword => "Invalid username or password",
+                    SteamCmdStatus.ExecutableNotFound => "SteamCMD executable not found",
+                    SteamCmdStatus.PathNotConfigured => "SteamCMD path not configured",
+                    SteamCmdStatus.Error => "SteamCMD returned an error, check logs for info.",
+                    _ => "An unknown error occurred, check logs for more info",
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            progress.Close();
+
+            Notifications.Error(ex, "Could not log into Steam");
+        }
+        finally
+        {
+            _processingLogin = false;
+        }
+    }
+
+    ISteamCmdService CreateSteamCmd()
+    {
+        var steamCmd = SteamCmd.Create();
+
+        if (!String.IsNullOrWhiteSpace(SteamCmdPath))
+            steamCmd.ExecutablePath = SteamCmdPath;
+
+        return steamCmd;
+    }
+}

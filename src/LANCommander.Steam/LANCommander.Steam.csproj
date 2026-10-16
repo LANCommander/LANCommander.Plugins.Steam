@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Drives SteamCMD and reads Steam's public store data.</Description>
+    <IsPackable>false</IsPackable>
+    <!-- Carried over from the server's copy, which predates nullable annotations in places -->
+    <Nullable>annotations</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The host provides these; the plugin compiles against them and ships none of them -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HtmlAgilityPack" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,172 @@
+@page "/Plugins/Steam/SteamCMD"
+@inject SteamSettingsStore Store
+@inject SteamCmdServiceFactory SteamCmd
+@inject NotificationService Notifications
+
+<PageHeader Title="SteamCMD">
+    <Extra>
+        <Button Primary OnClick="SaveAsync" Loading="_saving">Save</Button>
+    </Extra>
+</PageHeader>
+
+<PageContent Loading="_profiles == null">
+    <Form Model="this" OnSubmit="SaveAsync">
+        <FormItem Label="SteamCMD Path" Help="Leave empty to look for SteamCMD in the usual places whenever it is needed.">
+            <InputGroup Block>
+                <TextInput @bind-Value="_path" Placeholder="steamcmd" Style="flex: 1" />
+                <Tooltip Title="Auto Detect">
+                    <Button Icon="IconType.MagnifyingGlass" Loading="_detecting" OnClick="AutoDetectPathAsync" aria-label="Auto detect" />
+                </Tooltip>
+            </InputGroup>
+        </FormItem>
+    </Form>
+
+    <h2>Profiles</h2>
+
+    <Flex Vertical Gap="Gap.Large">
+        <Collapse>
+            @foreach (var profile in _profiles ?? [])
+            {
+                <Panel @key="profile" Header="@(String.IsNullOrWhiteSpace(profile.Username) ? "New Profile" : profile.Username)">
+                    <Extra>
+                        <Button Text Small Danger Icon="IconType.X" title="Remove" OnClick="() => RemoveProfileAsync(profile)" />
+                    </Extra>
+                    <ChildContent>
+                        <SteamProfileEditor @bind-Username="profile.Username"
+                                            @bind-InstallDirectory="profile.InstallDirectory"
+                                            SteamCmdPath="@_path" />
+                    </ChildContent>
+                </Panel>
+            }
+        </Collapse>
+
+        <Flex Justify="Justify.End">
+            <Button OnClick="AddProfile">Add Profile</Button>
+        </Flex>
+    </Flex>
+</PageContent>
+
+@code {
+    string? _path;
+    List<SteamCmdProfile>? _profiles;
+    bool _detecting;
+    bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _path = Store.Current.SteamCmdPath;
+
+        try
+        {
+            _profiles = (await SteamCmd.Create().GetProfilesAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            _profiles = [];
+
+            Notifications.Error(ex, "The Steam profiles could not be loaded");
+        }
+
+        if (_profiles.Count == 0)
+            AddProfile();
+    }
+
+    void AddProfile() => _profiles!.Add(new SteamCmdProfile());
+
+    async Task RemoveProfileAsync(SteamCmdProfile profile)
+    {
+        if (!String.IsNullOrWhiteSpace(profile.Username))
+        {
+            var progress = Notifications.ShowPersistent(NotificationLevel.Info, "Logging out of Steam...");
+
+            try
+            {
+                var steamCmd = CreateSteamCmd();
+
+                await steamCmd.LogoutAsync(profile.Username);
+                await steamCmd.DeleteProfileAsync(profile.Username);
+
+                _profiles!.Remove(profile);
+
+                progress.Close();
+
+                Notifications.Success("Successfully logged out from Steam!");
+            }
+            catch (Exception ex)
+            {
+                progress.Close();
+
+                Notifications.Error(ex, "Could not log out of Steam");
+            }
+        }
+        else
+            _profiles!.Remove(profile);
+
+        if (_profiles!.Count == 0)
+            AddProfile();
+    }
+
+    async Task SaveAsync()
+    {
+        _saving = true;
+
+        try
+        {
+            Store.Save(Store.Current with { SteamCmdPath = _path });
+
+            var steamCmd = CreateSteamCmd();
+
+            // A profile without a username has not been signed in yet, and there is nothing to keep
+            foreach (var profile in (_profiles ?? []).Where(p => !String.IsNullOrWhiteSpace(p.Username)))
+                await steamCmd.SaveProfileAsync(profile);
+
+            Notifications.Success("Settings saved!");
+        }
+        catch (Exception ex)
+        {
+            Notifications.Error(ex, "The settings could not be saved");
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    async Task AutoDetectPathAsync()
+    {
+        _detecting = true;
+
+        try
+        {
+            var path = await SteamCmd.Create().AutoDetectSteamCmdPathAsync();
+
+            if (!String.IsNullOrWhiteSpace(path))
+            {
+                _path = path;
+
+                Store.Save(Store.Current with { SteamCmdPath = path });
+            }
+            else
+                Notifications.Error("Could not automatically find SteamCMD! Is it installed?");
+        }
+        catch (Exception ex)
+        {
+            Notifications.Error(ex, "Could not look for SteamCMD");
+        }
+        finally
+        {
+            _detecting = false;
+        }
+    }
+
+    // Uses the path on the page, which may not be saved yet
+    ISteamCmdService CreateSteamCmd()
+    {
+        var steamCmd = SteamCmd.Create();
+
+        if (!String.IsNullOrWhiteSpace(_path))
+            steamCmd.ExecutablePath = _path;
+
+        return steamCmd;
+    }
+}
