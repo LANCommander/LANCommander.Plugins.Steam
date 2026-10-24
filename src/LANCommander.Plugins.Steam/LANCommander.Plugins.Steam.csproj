@@ -2,8 +2,9 @@
 
   <PropertyGroup>
     <Description>Adds SteamCMD to a LANCommander server: Steam sign-in profiles, an admin page, and the SteamCMD cmdlets for scripts.</Description>
+    <Title>Steam</Title>
     <Version>0.1.0</Version>
-    <IsPackable>false</IsPackable>
+    <PackageTags>lancommander;lancommander-plugin;steam;steamcmd</PackageTags>
     <!-- An unresolved component tag silently renders as a raw HTML element; fail the build instead -->
     <WarningsAsErrors>$(WarningsAsErrors);RZ10012</WarningsAsErrors>
     <!--
@@ -89,5 +90,8 @@
     <Copy SourceFiles="@(_PluginFile)" DestinationFiles="@(_PluginFile->'$(PluginDeployDirectory)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <Message Importance="high" Text="Deployed $(AssemblyName) to $(PluginDeployDirectory)" />
   </Target>
+
+  <!-- dotnet pack makes the package the server's Plugins page installs -->
+  <Import Project="..\..\build\PluginPackage.targets" />
 
 </Project>

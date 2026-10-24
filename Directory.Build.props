@@ -5,4 +5,21 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
+
+  <!--
+    Package metadata. Only the plugin is published; it imports build/PluginPackage.targets, which
+    makes it packable. The libraries it carries are packed inside it.
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <Authors>LANCommander</Authors>
+    <Company>LANCommander</Company>
+    <Copyright>Copyright (c) LANCommander</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/LANCommander/LANCommander.Plugins.Steam</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/LANCommander/LANCommander.Plugins.Steam</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageIcon>package-icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
 </Project>
